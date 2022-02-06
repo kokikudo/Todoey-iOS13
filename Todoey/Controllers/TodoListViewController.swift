@@ -10,86 +10,105 @@ import UIKit
 
 class TodoListViewController: UITableViewController {
 
-    // 表示するコンテンツ
     var itemArray = [
         Item(title: "Find Mile"),
         Item(title: "Buy Eggos"),
         Item(title: "Destory Demogorogon")
     ]
 
+    // 保存場所のファイルパス
+    let dataFilePath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first?.appendingPathComponent("Item.plist")
+
     override func viewDidLoad() {
         super.viewDidLoad()
-}
 
-    // 表示するセルの数。基本的にコンテンツが入ってるリストの数を返す。
+        loadItems() // 画面読み込み時にデータをロード
+    }
+
     override func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
         return itemArray.count
     }
 
-    // cellを生成
     override func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
 
-        // 再利用可能なセル
         let cell = tableView.dequeueReusableCell(withIdentifier: "TableViewCell", for: indexPath)
 
-        // セルに組み込むコンテンツ
         let item = itemArray[indexPath.row]
 
-        // セルのタイトル
         cell.textLabel?.text = item.title
 
-        // doneプロパティの値からセルにチェックマークをつけるか判断
         cell.accessoryType = item.done ? .checkmark : .none
 
         return cell
     }
 
-    // セルをタップした時の処理
     override func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
 
-        // doneのBool値をスイッチ
         itemArray[indexPath.row].done = !itemArray[indexPath.row].done
 
-        tableView.reloadData() // リロード
-
-        // 選択したことがわかるようにハイライト
-        //tableView.deselectRow(at: indexPath, animated: true)
+        saveItems() // 保存
     }
 
-    // 追加ボタン
+
+    // チェックマーク更新時とItem追加時にデータを保存
+    func saveItems() {
+        // エンコーダーの生成
+        let encoder = PropertyListEncoder()
+
+        // データをエンコードしてローカルファイルに保存
+        do {
+            let data = try encoder.encode(self.itemArray)
+            try data.write(to: self.dataFilePath!)
+        } catch {
+            print("Encode Error: \(error)")
+        }
+
+        self.tableView.reloadData()
+    }
+
+    // 保存したデータを読み込み
+    func loadItems() {
+
+        // まずはデータがパスにあるか確認
+        if let data = try? Data(contentsOf: dataFilePath!) {
+
+            // デコーダー生成
+            let decoder = PropertyListDecoder()
+
+            // デコード
+            do {
+                itemArray = try decoder.decode([Item].self, from: data)
+            } catch {
+                    print("Decode Error: \(error)")
+            }
+
+        }
+    }
+
     @IBAction func addButtonPressed(_ sender: UIBarButtonItem) {
 
-        //入力したテキストを保持するプロパティ
         var textField = UITextField()
 
-        //UIAlertController作成
         let alert = UIAlertController(title: "Add New Todoey Item", message: "", preferredStyle: .alert)
 
-        //項目
         let action = UIAlertAction(title: "AddItem", style: .default) { action in
 
-            // 保持したテキストをリストに追加
             if let inputedText = textField.text {
                 self.itemArray.append(Item(title: inputedText))
 
-                // リロード
-                self.tableView.reloadData()
+                self.saveItems() // 保存
             }
 
 
         }
 
-        // アラートにTextField追加
         alert.addTextField { (alerTextField) in
             alerTextField.placeholder = "Create new item"
-            textField = alerTextField // 入力したテキストを保持
+            textField = alerTextField
 
         }
 
-        //アラートに項目を追加
         alert.addAction(action)
-
-        //アラートを表示
         present(alert, animated: true, completion: nil)
     }
 }

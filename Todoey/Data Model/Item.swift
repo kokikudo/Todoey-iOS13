@@ -8,7 +8,8 @@
 
 import Foundation
 
-class Item {
+// エンコード、デコードを可能にするためのプロトコル
+class Item: Codable {
     let title: String
     var done: Bool
 
