@@ -4,6 +4,12 @@ import CoreData
 class TodoListViewController: UITableViewController {
 
     var itemArray = [Item]()
+    var selectedCategory: Category? {
+        didSet {
+            loadItems() // 更新されるたびにロードする
+        }
+    }
+
 
     // コンテキストを取得
     // Appdelegateクラスから直接呼び出すのではなく、UIApplicationのシングルトンsharedにdelegateプロパティがあるのでそれをキャストしてコンテキストを呼び出す。
@@ -14,8 +20,6 @@ class TodoListViewController: UITableViewController {
 
         // 保存したデータがあるフォルダのパスを確認
         print(FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask))
-
-        loadItems()
     }
 
     override func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
@@ -41,8 +45,8 @@ class TodoListViewController: UITableViewController {
 
         // 項目を削除
         // 先にDBから削除しないとインデックスレンジエラーになる
-//        context.delete(itemArray[indexPath.row])
-//        itemArray.remove(at: indexPath.row)
+        //        context.delete(itemArray[indexPath.row])
+        //        itemArray.remove(at: indexPath.row)
 
         saveItems()
 
@@ -62,7 +66,7 @@ class TodoListViewController: UITableViewController {
                 let newItem = Item(context: self.context)
                 newItem.title = inputedText
                 newItem.done = false
-
+                newItem.parentCategory = self.selectedCategory
                 self.itemArray.append(newItem)
 
                 self.saveItems() // 保存
@@ -85,6 +89,7 @@ class TodoListViewController: UITableViewController {
     func saveItems() {
         do {
             try context.save() // コンテキストの内容を保存
+
         } catch {
             print("コンテキストへの保存時にエラー発生: \(error)")
         }
@@ -95,14 +100,27 @@ class TodoListViewController: UITableViewController {
 
     // リクエストをもとにDBからデータを取得
     // 引数のwithキーワードを使うと関数呼び出し時に引数がwithになり直感的に把握しやすくなる
-    func loadItems(with request: NSFetchRequest<Item> = Item.fetchRequest()) {
+    func loadItems(with request: NSFetchRequest<Item> = Item.fetchRequest(), predicate: NSPredicate? = nil) {
+
+        // カテゴリ固定のため常にNSPredicateを用意する
+        let categoryPredicate = NSPredicate(format: "parentCategory.name MATCHES %@", selectedCategory!.name!)
+
+        // 引数<predicate>がある場合(検索した場合)、検索条件に加える
+        if let additionalPredicate = predicate {
+            request.predicate = NSCompoundPredicate(andPredicateWithSubpredicates: [categoryPredicate, additionalPredicate])
+        } else {
+            request.predicate = categoryPredicate
+        }
 
         do {
             // contextからデータ取得をリクエスト
             itemArray = try context.fetch(request)
+
         } catch {
             print("Error fetching data from context: \(error)")
         }
+
+        self.tableView.reloadData()
     }
 }
 
@@ -118,20 +136,18 @@ extension TodoListViewController: UISearchBarDelegate {
         // リクエスト
         let request: NSFetchRequest<Item> = Item.fetchRequest()
 
-
         // フィルター
         // NSPredicate(format: <検索条件の文字列>, <検索条件の中にある"@"に代入される値>)
         // 検索条件の設定方法は動画のURLから飛べるページを参考にする
-        request.predicate = NSPredicate(format: "title CONTAINS[cd] %@", searchBar.text!)
+        let predicate = NSPredicate(format: "title CONTAINS[cd] %@", searchBar.text!)
 
         // ソート
         // [NSSortDescriptor(key: ソート対象のデータ名, ascending: trueなら昇順)]
         request.sortDescriptors = [NSSortDescriptor(key: "title", ascending: true)]
 
         // withキーワードのおかげで(request: request)のように変数名が被らないので見やすい
-        loadItems(with: request)
+        loadItems(with: request, predicate: predicate)
 
-        tableView.reloadData()
     }
 
     // 入力テキストが無い時に全てのデータを表示させる
@@ -142,7 +158,6 @@ extension TodoListViewController: UISearchBarDelegate {
         if searchText.isEmpty {
             loadItems()
 
-            tableView.reloadData()
 
             // キーボードを下げる
             // UIの変更はメインスレッドで行う
