@@ -1,56 +1,67 @@
 import UIKit
-import CoreData
+import RealmSwift
 
-class TodoListViewController: UITableViewController {
+class TodoListViewController: SwipeTableViewController {
 
-    var itemArray = [Item]()
+    let realm = try! Realm() // Realm初期化
+    var items: Results<Item>?
     var selectedCategory: Category? {
         didSet {
             loadItems() // 更新されるたびにロードする
         }
     }
 
-
-    // コンテキストを取得
-    // Appdelegateクラスから直接呼び出すのではなく、UIApplicationのシングルトンsharedにdelegateプロパティがあるのでそれをキャストしてコンテキストを呼び出す。
-    let context = (UIApplication.shared.delegate as! AppDelegate).persistentContainer.viewContext
-
     override func viewDidLoad() {
         super.viewDidLoad()
-
-        // 保存したデータがあるフォルダのパスを確認
-        print(FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask))
     }
 
     override func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
-        return itemArray.count
+        return items?.count ?? 1
     }
 
     override func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
 
-        let cell = tableView.dequeueReusableCell(withIdentifier: "TableViewCell", for: indexPath)
+        let cell = super.tableView(tableView, cellForRowAt: indexPath)
 
-        let item = itemArray[indexPath.row]
+        if let item = items?[indexPath.row] {
+            cell.textLabel?.text = item.title
 
-        cell.textLabel?.text = item.title
-
-        cell.accessoryType = item.done ? .checkmark : .none
-
+            cell.accessoryType = item.done ? .checkmark : .none
+        } else {
+            cell.textLabel?.text = "No Item Added"
+        }
         return cell
     }
 
     override func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
 
-        itemArray[indexPath.row].done = !itemArray[indexPath.row].done
-
-        // 項目を削除
-        // 先にDBから削除しないとインデックスレンジエラーになる
-        //        context.delete(itemArray[indexPath.row])
-        //        itemArray.remove(at: indexPath.row)
-
-        saveItems()
-
+        if let item = items?[indexPath.row] {
+            do {
+                try realm.write {
+                    item.done = !item.done
+                }
+            } catch {
+                print("Error saving done status: \(error)")
+            }
+        }
+        self.tableView.reloadData()
     }
+
+    //SwipeKitを使わない場合のセル削除機能実装コード
+    //UITableViewCellのメソッドに既にあるが、細かいカスタマイズをしたい場合はSwipeKitの方が良さげ
+    //    override func tableView(_ tableView: UITableView, commit editingStyle: UITableViewCell.EditingStyle, forRowAt indexPath: IndexPath) {
+    //
+    //        if let item = items?[indexPath.row] {
+    //            do {
+    //                try realm.write {
+    //                    realm.delete(item)
+    //                }
+    //            } catch {
+    //                print("Error delete item: \(error)")
+    //            }
+    //        }
+    //        self.tableView.reloadData()
+    //    }
 
     @IBAction func addButtonPressed(_ sender: UIBarButtonItem) {
 
@@ -60,19 +71,26 @@ class TodoListViewController: UITableViewController {
 
         let action = UIAlertAction(title: "AddItem", style: .default) { action in
 
-            if let inputedText = textField.text {
+            if !textField.text!.isEmpty {
+                // 項目を追加する処理
+                // selectedCategoryをアンラップ
+                if let currentCategory = self.selectedCategory {
+                    do {
+                        // 追加する処理をrealm.write関数のコードブロック内に書くことで値の更新ができる
+                        try self.realm.write {
+                            let newItem = Item()
+                            newItem.title = textField.text!
+                            newItem.createdDate = Date()
+                            currentCategory.items.append(newItem)
+                        }
 
-                // コンテキストにItemデータを作成
-                let newItem = Item(context: self.context)
-                newItem.title = inputedText
-                newItem.done = false
-                newItem.parentCategory = self.selectedCategory
-                self.itemArray.append(newItem)
+                    } catch {
+                        print("Error adding NewItem: \(error)")
+                    }
+                }
 
-                self.saveItems() // 保存
+                self.tableView.reloadData()
             }
-
-
         }
 
         alert.addTextField { (alerTextField) in
@@ -86,10 +104,11 @@ class TodoListViewController: UITableViewController {
         present(alert, animated: true, completion: nil)
     }
 
-    func saveItems() {
+    func saveItems(item: Item) {
         do {
-            try context.save() // コンテキストの内容を保存
-
+            try realm.write {
+                realm.add(item)
+            }
         } catch {
             print("コンテキストへの保存時にエラー発生: \(error)")
         }
@@ -97,30 +116,24 @@ class TodoListViewController: UITableViewController {
         self.tableView.reloadData()
     }
 
+    func loadItems() {
 
-    // リクエストをもとにDBからデータを取得
-    // 引数のwithキーワードを使うと関数呼び出し時に引数がwithになり直感的に把握しやすくなる
-    func loadItems(with request: NSFetchRequest<Item> = Item.fetchRequest(), predicate: NSPredicate? = nil) {
+        // キーパス（Itemのtitle）とソート順を指定してデータを取得
+        items = selectedCategory?.items.sorted(byKeyPath: "title", ascending: true)
 
-        // カテゴリ固定のため常にNSPredicateを用意する
-        let categoryPredicate = NSPredicate(format: "parentCategory.name MATCHES %@", selectedCategory!.name!)
+        tableView.reloadData()
+    }
 
-        // 引数<predicate>がある場合(検索した場合)、検索条件に加える
-        if let additionalPredicate = predicate {
-            request.predicate = NSCompoundPredicate(andPredicateWithSubpredicates: [categoryPredicate, additionalPredicate])
-        } else {
-            request.predicate = categoryPredicate
+    override func updateModel(at indexPath: IndexPath) {
+        if let item = items?[indexPath.row] {
+            do {
+                try realm.write {
+                    realm.delete(item)
+                }
+            } catch {
+                print("Error delete item: \(error)")
+            }
         }
-
-        do {
-            // contextからデータ取得をリクエスト
-            itemArray = try context.fetch(request)
-
-        } catch {
-            print("Error fetching data from context: \(error)")
-        }
-
-        self.tableView.reloadData()
     }
 }
 
@@ -131,23 +144,10 @@ extension TodoListViewController: UISearchBarDelegate {
     // 検索機能を定義するデリゲートメソッド
     func searchBarSearchButtonClicked(_ searchBar: UISearchBar) {
 
-        // NSFetchRequestクラスを生成し、そのプロパティに検索条件を指定する個別のNSクラスを定義する
+        // titleで検索し追加日でソート
+        items = items?.filter("title CONTAINS[cd] %@", searchBar.text!).sorted(byKeyPath: "createdDate", ascending: true)
 
-        // リクエスト
-        let request: NSFetchRequest<Item> = Item.fetchRequest()
-
-        // フィルター
-        // NSPredicate(format: <検索条件の文字列>, <検索条件の中にある"@"に代入される値>)
-        // 検索条件の設定方法は動画のURLから飛べるページを参考にする
-        let predicate = NSPredicate(format: "title CONTAINS[cd] %@", searchBar.text!)
-
-        // ソート
-        // [NSSortDescriptor(key: ソート対象のデータ名, ascending: trueなら昇順)]
-        request.sortDescriptors = [NSSortDescriptor(key: "title", ascending: true)]
-
-        // withキーワードのおかげで(request: request)のように変数名が被らないので見やすい
-        loadItems(with: request, predicate: predicate)
-
+        tableView.reloadData()
     }
 
     // 入力テキストが無い時に全てのデータを表示させる
@@ -158,10 +158,6 @@ extension TodoListViewController: UISearchBarDelegate {
         if searchText.isEmpty {
             loadItems()
 
-
-            // キーボードを下げる
-            // UIの変更はメインスレッドで行う
-            // 元々メインスレッドで行っている処理のはずだが、DispatchQueueで移動しないと検索バーの×ボタンを押した時にキーボードが閉じなくなる
             DispatchQueue.main.async {
                 searchBar.resignFirstResponder()
             }

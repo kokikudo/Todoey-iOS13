@@ -7,15 +7,15 @@
 //
 
 import UIKit
-import CoreData
+import RealmSwift
 
-// 検索機能がないこと、セルをタップしたらそのCategoryをAttributeに設定してあるItemに絞って表示すること
-// それ以外はTodoListViewControllerと一緒
+class CategoryViewController: SwipeTableViewController {
 
-class CategoryViewController: UITableViewController {
+    let realm = try! Realm() // Realm初期化
 
-    var categories = [Category]()
-    let context = (UIApplication.shared.delegate as! AppDelegate).persistentContainer.viewContext
+    // 自動更新してくれるResultsクラス
+    // CoreDataの時のように配列に追加するような処理はいらない
+    var categories: Results<Category>?
 
     
     override func viewDidLoad() {
@@ -26,35 +26,32 @@ class CategoryViewController: UITableViewController {
 
 
     override func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
-        return categories.count
+
+        return categories?.count ?? 1
     }
 
     override func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
 
-        let cell = tableView.dequeueReusableCell(withIdentifier: "CategoryCell", for: indexPath)
+        // 継承元のCell生成メソッドを実行しCellを取得
+        let cell = super.tableView(tableView, cellForRowAt: indexPath)
 
-        cell.textLabel?.text = categories[indexPath.row].name
+        cell.textLabel?.text = categories?[indexPath.row].name ?? "No Category Added"
 
         return cell
     }
 
     override func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
 
-        // segueを指定し画面遷移
         performSegue(withIdentifier: "goToItems", sender: self)
 
     }
 
-    // 遷移前に実行。TodoListViewControllerのプロパティ<selectedCategory>に値をセット
     override func prepare(for segue: UIStoryboardSegue, sender: Any?) {
 
-        // 遷移先であるTodoListViewControllerを定義
         let destinationVC = segue.destination as! TodoListViewController
 
-        // tableViewのプロパティ<indexPathForSelectedRow>で選択したセルのインデックスを取得できる
-        // nilチェックをしてTodoListViewControllerのプロパティ<selectedCategory>にタップしたセルのCategoryをセット
         if let indexPath = tableView.indexPathForSelectedRow {
-            destinationVC.selectedCategory = categories[indexPath.row]
+            destinationVC.selectedCategory = categories?[indexPath.row]
         }
 
     }
@@ -69,17 +66,15 @@ class CategoryViewController: UITableViewController {
 
             if let inputedText = textField.text {
 
-                let newCategory = Category(context: self.context)
+                let newCategory = Category()
                 newCategory.name = inputedText
 
-                self.categories.append(newCategory)
-
-                self.saveCategory()
+                self.save(category: newCategory) // Categoryを渡して保存
             }
 
         }
 
-        alert.addTextField { (alerTextField) in
+        alert.addTextField { alerTextField in
             alerTextField.placeholder = "Create new category"
             textField = alerTextField
         }
@@ -89,9 +84,12 @@ class CategoryViewController: UITableViewController {
         present(alert, animated: true, completion: nil)
     }
 
-    func saveCategory() {
+    func save(category: Category) {
         do {
-            try context.save()
+            // 保存
+            try realm.write {
+                realm.add(category)
+            }
 
         } catch {
             print("Error saving context: \(error)")
@@ -101,15 +99,25 @@ class CategoryViewController: UITableViewController {
     }
 
     func loadCategory() {
-        let request: NSFetchRequest<Category> = Category.fetchRequest()
-        do {
-            categories = try context.fetch(request)
-        } catch {
-            print("Error fetching data from context: \(error)")
-        }
+
+        // Realmからデータを取得し変数にセット
+        // realm.objects(欲しいデータのタイプ。selfをつけるだけでいい)
+        categories = realm.objects(Category.self)
 
         self.tableView.reloadData()
     }
 
+    // 親クラスで定義したupdateModelの処理内容をこのクラスで実装する
+    override func updateModel(at indexPath: IndexPath) {
+        if let category = self.categories?[indexPath.row] {
+            do {
+                try self.realm.write {
+                    self.realm.delete(category)
+                }
+            } catch {
+                print("Error delete category: \(error)")
+            }
+        }
+    }
 
 }
