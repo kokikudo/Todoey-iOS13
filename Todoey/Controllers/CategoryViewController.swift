@@ -8,106 +8,106 @@
 
 import UIKit
 import RealmSwift
+import ChameleonFramework
 
 class CategoryViewController: SwipeTableViewController {
-
-    let realm = try! Realm() // Realm初期化
-
-    // 自動更新してくれるResultsクラス
-    // CoreDataの時のように配列に追加するような処理はいらない
-    var categories: Results<Category>?
-
     
+    let realm = try! Realm()
+    var categories: Results<Category>?
+    
+    // MARK: - ビュー表示
     override func viewDidLoad() {
         super.viewDidLoad()
-
+        
         loadCategory()
     }
-
-
+    
+    // MARK: - TableView デリゲードメソッド
     override func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
-
+        
         return categories?.count ?? 1
     }
-
+    
+    
     override func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
-
-        // 継承元のCell生成メソッドを実行しCellを取得
+        
         let cell = super.tableView(tableView, cellForRowAt: indexPath)
-
+        
         cell.textLabel?.text = categories?[indexPath.row].name ?? "No Category Added"
+        cell.backgroundColor = UIColor(hexString: categories?[indexPath.row].colourValue ?? "00D6FF")
 
         return cell
     }
-
+    
     override func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
-
+        
         performSegue(withIdentifier: "goToItems", sender: self)
-
+        
     }
-
+    
+    // MARK: - TodoListページへ移動
     override func prepare(for segue: UIStoryboardSegue, sender: Any?) {
-
+        
         let destinationVC = segue.destination as! TodoListViewController
-
+        
         if let indexPath = tableView.indexPathForSelectedRow {
             destinationVC.selectedCategory = categories?[indexPath.row]
         }
-
+        
     }
-
+    
+    // MARK: - 追加ボタン
     @IBAction func addButtonPressed(_ sender: UIBarButtonItem) {
-
+        
         var textField = UITextField()
-
+        
         let alert = UIAlertController(title: "Add New Category", message: "", preferredStyle: .alert)
-
+        
         let action = UIAlertAction(title: "Add Category", style: .default) { action in
-
+            
             if let inputedText = textField.text {
-
+                
                 let newCategory = Category()
                 newCategory.name = inputedText
-
-                self.save(category: newCategory) // Categoryを渡して保存
+                newCategory.colourValue = UIColor.randomFlat().hexValue()
+                self.save(category: newCategory)
             }
-
+            
         }
-
+        
         alert.addTextField { alerTextField in
             alerTextField.placeholder = "Create new category"
             textField = alerTextField
         }
-
+        
         alert.addAction(action)
-
+        
         present(alert, animated: true, completion: nil)
     }
-
+    
+    // MARK: - データ保存
     func save(category: Category) {
         do {
-            // 保存
             try realm.write {
                 realm.add(category)
             }
-
+            
         } catch {
             print("Error saving context: \(error)")
         }
-
+        
         self.tableView.reloadData()
     }
-
+    
+    // MARK: - データロード
     func loadCategory() {
-
-        // Realmからデータを取得し変数にセット
-        // realm.objects(欲しいデータのタイプ。selfをつけるだけでいい)
+        
         categories = realm.objects(Category.self)
-
+        
         self.tableView.reloadData()
     }
-
-    // 親クラスで定義したupdateModelの処理内容をこのクラスで実装する
+    
+    // MARK: - データ削除
     override func updateModel(at indexPath: IndexPath) {
         if let category = self.categories?[indexPath.row] {
             do {
@@ -119,5 +119,5 @@ class CategoryViewController: SwipeTableViewController {
             }
         }
     }
-
+    
 }
