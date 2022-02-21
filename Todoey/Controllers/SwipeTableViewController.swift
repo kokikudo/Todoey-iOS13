@@ -8,7 +8,7 @@
 
 import UIKit
 import SwipeCellKit
-
+import ChameleonFramework
 // CategoryViewControllerとTodoListViewController両方に共通する機能を定義したクラス。このクラスを継承して二つのViewControllerを定義する
 class SwipeTableViewController: UITableViewController, SwipeTableViewCellDelegate {
     
@@ -16,11 +16,13 @@ class SwipeTableViewController: UITableViewController, SwipeTableViewCellDelegat
         super.viewDidLoad()
         
         tableView.rowHeight = 80.0 // セルの高さ
+        tableView.backgroundColor = FlatWhite() // 背景色
+
     }
     
     // Cellを生成
     override func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
-        
+
         //　ストーリーボードで継承先のCellのIdentifierを"Cell"にする
         //　また、CustomClassのClassをSwipeTableViewCell,ModuleをSwipeCellKitに指定しておかないとキャストエラーになる
         let cell = tableView.dequeueReusableCell(withIdentifier: "Cell", for: indexPath) as! SwipeTableViewCell

@@ -15,10 +15,26 @@ class CategoryViewController: SwipeTableViewController {
     let realm = try! Realm()
     var categories: Results<Category>?
     
-    // MARK: - ビュー表示
+    // MARK: - ライフサイクルメソッド
     override func viewDidLoad() {
         super.viewDidLoad()
+
         
+        //loadCategory() なぜかここでロードするとタップしたセルの色がグレーになる
+    }
+
+    override func viewWillAppear(_ animated: Bool) {
+        guard let navBar = navigationController?.navigationBar else {fatalError("Navigation controller does not exist"
+        )}
+
+        // ナビゲーションバーの色を設定
+        navBar.subviews[0].backgroundColor = FlatWhite() // SafeAreaの色の変更。ナビゲーションのサブビューはこのビューそのものなので[0]は一番上のビューであるSafeAreaになる
+        navBar.backgroundColor = FlatWhite()
+        navBar.tintColor = .link
+        navBar.largeTitleTextAttributes = [NSAttributedString.Key.foregroundColor: ContrastColorOf(FlatWhite(), returnFlat: true)]
+
+
+        //　viewWillAppearでロードするとタップされた時のグレーから元に戻る
         loadCategory()
     }
     
@@ -27,15 +43,24 @@ class CategoryViewController: SwipeTableViewController {
         
         return categories?.count ?? 1
     }
+
     
     
     override func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
         
         let cell = super.tableView(tableView, cellForRowAt: indexPath)
-        
-        cell.textLabel?.text = categories?[indexPath.row].name ?? "No Category Added"
-        cell.backgroundColor = UIColor(hexString: categories?[indexPath.row].colourValue ?? "00D6FF")
 
+        cell.layer.cornerRadius = 40
+
+
+        if let category = categories?[indexPath.row] {
+            cell.textLabel?.text = category.name
+
+            guard let categoryColour = UIColor(hexString: category.colourValue) else {fatalError("")}
+
+            cell.backgroundColor = categoryColour
+            cell.textLabel?.textColor = ContrastColorOf(categoryColour, returnFlat: true)
+        }
         return cell
     }
     

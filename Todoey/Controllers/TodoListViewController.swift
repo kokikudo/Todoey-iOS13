@@ -1,18 +1,59 @@
 import UIKit
 import RealmSwift
+import ChameleonFramework
 
-class TodoListViewController: SwipeTableViewController {
+//TODO: カテゴリのリストの左側だけに丸みをつけたい
+//TODO: カテゴリのリストの下側にマージンを入れたい
 
-    let realm = try! Realm() // Realm初期化
+class TodoListViewController: SwipeTableViewController, UINavigationBarDelegate {
+
+    @IBOutlet weak var searchBar: UISearchBar!
+    let realm = try! Realm()
     var items: Results<Item>?
     var selectedCategory: Category? {
         didSet {
-            loadItems() // 更新されるたびにロードする
+            loadItems()
         }
     }
 
+    // MARK: - ライフサイクルメソッド
     override func viewDidLoad() {
         super.viewDidLoad()
+
+        tableView.separatorStyle = .none // セパレート無し
+    }
+
+    // ビュー表示後（viewDidLoad実行後）に実行される
+    // viewDidLoadでナビゲーションの設定をいじろうとするとナビゲーションスタックに入る前に実行されてしまいエラーになる
+    override func viewWillAppear(_ animated: Bool) {
+
+        // ナビゲーションのタイトルをカテゴリ名にする
+        title = selectedCategory!.name
+
+        // ナビゲーションカラーを設定
+        if let colourHex = selectedCategory?.colourValue {
+            guard let navBar = navigationController?.navigationBar else {fatalError("Navigation controller does not exist"
+            )}
+
+            // UIColor(hexString:)の返り値はOptional型なのでアンラップする
+            if let navBarColour = UIColor(hexString: colourHex) {
+
+                let contrastColor = ContrastColorOf(navBarColour, returnFlat: true)
+                navBar.subviews[0].backgroundColor = navBarColour
+                navBar.backgroundColor = navBarColour
+                navBar.tintColor = contrastColor
+                navBar.largeTitleTextAttributes = [NSAttributedString.Key.foregroundColor: contrastColor]
+
+                // ios13以降の検索バーの色の変更は以下の通りになったらしい
+                searchBar.barTintColor = navBarColour
+                searchBar.searchTextField.backgroundColor = FlatWhite()
+                //searchBar.backgroundImage = UIImage()
+            }
+        }
+    }
+
+    func position(for bar: UIBarPositioning) -> UIBarPosition {
+        return .topAttached
     }
 
     override func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
@@ -26,6 +67,14 @@ class TodoListViewController: SwipeTableViewController {
         if let item = items?[indexPath.row] {
             cell.textLabel?.text = item.title
 
+            // リストの背景色とテキストの色を設定
+            if let colour = UIColor(hexString: selectedCategory!.colourValue)?.darken(byPercentage:
+                                                CGFloat(indexPath.row) / CGFloat(items!.count)
+            ) {
+                cell.backgroundColor = colour
+                cell.textLabel?.textColor = ContrastColorOf(colour, returnFlat: true)
+            }
+            
             cell.accessoryType = item.done ? .checkmark : .none
         } else {
             cell.textLabel?.text = "No Item Added"
@@ -47,22 +96,6 @@ class TodoListViewController: SwipeTableViewController {
         self.tableView.reloadData()
     }
 
-    //SwipeKitを使わない場合のセル削除機能実装コード
-    //UITableViewCellのメソッドに既にあるが、細かいカスタマイズをしたい場合はSwipeKitの方が良さげ
-    //    override func tableView(_ tableView: UITableView, commit editingStyle: UITableViewCell.EditingStyle, forRowAt indexPath: IndexPath) {
-    //
-    //        if let item = items?[indexPath.row] {
-    //            do {
-    //                try realm.write {
-    //                    realm.delete(item)
-    //                }
-    //            } catch {
-    //                print("Error delete item: \(error)")
-    //            }
-    //        }
-    //        self.tableView.reloadData()
-    //    }
-
     @IBAction func addButtonPressed(_ sender: UIBarButtonItem) {
 
         var textField = UITextField()
@@ -72,11 +105,9 @@ class TodoListViewController: SwipeTableViewController {
         let action = UIAlertAction(title: "AddItem", style: .default) { action in
 
             if !textField.text!.isEmpty {
-                // 項目を追加する処理
-                // selectedCategoryをアンラップ
+
                 if let currentCategory = self.selectedCategory {
                     do {
-                        // 追加する処理をrealm.write関数のコードブロック内に書くことで値の更新ができる
                         try self.realm.write {
                             let newItem = Item()
                             newItem.title = textField.text!
@@ -118,7 +149,6 @@ class TodoListViewController: SwipeTableViewController {
 
     func loadItems() {
 
-        // キーパス（Itemのtitle）とソート順を指定してデータを取得
         items = selectedCategory?.items.sorted(byKeyPath: "title", ascending: true)
 
         tableView.reloadData()
@@ -138,20 +168,15 @@ class TodoListViewController: SwipeTableViewController {
 }
 
 
-// 検索機能追加
 extension TodoListViewController: UISearchBarDelegate {
 
-    // 検索機能を定義するデリゲートメソッド
     func searchBarSearchButtonClicked(_ searchBar: UISearchBar) {
 
-        // titleで検索し追加日でソート
         items = items?.filter("title CONTAINS[cd] %@", searchBar.text!).sorted(byKeyPath: "createdDate", ascending: true)
 
         tableView.reloadData()
     }
 
-    // 入力テキストが無い時に全てのデータを表示させる
-    // バー右端のキャンセルボタンを押したときと、キーボードでテキストを削除した時に実行される
     func searchBar(_ searchBar: UISearchBar, textDidChange searchText: String) {
 
 
